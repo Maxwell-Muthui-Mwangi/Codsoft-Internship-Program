@@ -1,0 +1,258 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <ctime>
+#include <iomanip>
+
+using namespace std;
+
+struct Book {
+    string title;
+    string author;
+    string ISBN;
+    bool isAvailable;
+    time_t dueDate; // For simplicity, using time_t to store due dates
+};
+
+struct Borrower {
+    string name;
+    string ID;
+};
+
+struct Transaction {
+    string borrowerID;
+    string ISBN;
+    time_t checkoutDate;
+    time_t dueDate;
+    bool returned;
+};
+
+vector<Book> books;
+vector<Borrower> borrowers;
+vector<Transaction> transactions;
+
+// Function prototypes
+void displayMenu();
+void addBook();
+void searchBook();
+void checkoutBook();
+void returnBook();
+void calculateFine();
+void displayBooks();
+void addBorrower();
+void displayBorrowers();
+time_t getDueDate(time_t checkoutDate, int days = 14); // Default 14 days borrowing period
+double calculateFine(time_t dueDate, time_t returnDate, double finePerDay = 0.50);
+
+int main() {
+    int choice;
+    do {
+        displayMenu();
+        cin >> choice;
+        switch (choice) {
+            case 1: addBook(); break;
+            case 2: searchBook(); break;
+            case 3: checkoutBook(); break;
+            case 4: returnBook(); break;
+            case 5: calculateFine(); break;
+            case 6: displayBooks(); break;
+            case 7: addBorrower(); break;
+            case 8: displayBorrowers(); break;
+            case 9: cout << "Exiting the program." << endl; break;
+            default: cout << "Invalid choice! Please choose a number between 1 and 9." << endl; break;
+        }
+    } while (choice != 9);
+
+    return 0;
+}
+
+void displayMenu() {
+    cout << "\nLibrary Management System" << endl;
+    cout << "1. Add Book" << endl;
+    cout << "2. Search Book" << endl;
+    cout << "3. Checkout Book" << endl;
+    cout << "4. Return Book" << endl;
+    cout << "5. Calculate Fine" << endl;
+    cout << "6. Display All Books" << endl;
+    cout << "7. Add Borrower" << endl;
+    cout << "8. Display All Borrowers" << endl;
+    cout << "9. Exit" << endl;
+    cout << "Enter your choice (1-9): ";
+}
+
+void addBook() {
+    Book newBook;
+    cout << "Enter the book title: ";
+    cin.ignore();
+    getline(cin, newBook.title);
+    cout << "Enter the author: ";
+    getline(cin, newBook.author);
+    cout << "Enter the ISBN: ";
+    getline(cin, newBook.ISBN);
+    newBook.isAvailable = true;
+    newBook.dueDate = 0; // 0 indicates no due date assigned
+    books.push_back(newBook);
+    cout << "Book added!" << endl;
+}
+
+void searchBook() {
+    int option;
+    string searchTerm;
+    cout << "Search by: 1. Title 2. Author 3. ISBN: ";
+    cin >> option;
+    cin.ignore();
+    if (option == 1) {
+        cout << "Enter the title: ";
+        getline(cin, searchTerm);
+        for (const auto &book : books) {
+            if (book.title.find(searchTerm) != string::npos) {
+                cout << "Title: " << book.title << ", Author: " << book.author << ", ISBN: " << book.ISBN 
+                     << ", Availability: " << (book.isAvailable ? "Available" : "Checked out") << endl;
+            }
+        }
+    } else if (option == 2) {
+        cout << "Enter the author: ";
+        getline(cin, searchTerm);
+        for (const auto &book : books) {
+            if (book.author.find(searchTerm) != string::npos) {
+                cout << "Title: " << book.title << ", Author: " << book.author << ", ISBN: " << book.ISBN 
+                     << ", Availability: " << (book.isAvailable ? "Available" : "Checked out") << endl;
+            }
+        }
+    } else if (option == 3) {
+        cout << "Enter the ISBN: ";
+        getline(cin, searchTerm);
+        for (const auto &book : books) {
+            if (book.ISBN == searchTerm) {
+                cout << "Title: " << book.title << ", Author: " << book.author 
+                     << ", Availability: " << (book.isAvailable ? "Available" : "Checked out") << endl;
+            }
+        }
+    } else {
+        cout << "Invalid option!" << endl;
+    }
+}
+
+void checkoutBook() {
+    string borrowerID, ISBN;
+    cout << "Enter borrower's ID: ";
+    cin.ignore();
+    getline(cin, borrowerID);
+    cout << "Enter the book ISBN: ";
+    getline(cin, ISBN);
+
+    for (auto &book : books) {
+        if (book.ISBN == ISBN) {
+            if (!book.isAvailable) {
+                cout << "Book is already checked out." << endl;
+                return;
+            }
+
+            book.isAvailable = false;
+            time_t now = time(0);
+            time_t dueDate = getDueDate(now);
+
+            Transaction newTransaction = {borrowerID, ISBN, now, dueDate, false};
+            transactions.push_back(newTransaction);
+
+            cout << "Book checked out successfully! Due date is: " << ctime(&dueDate);
+            return;
+        }
+    }
+    cout << "Book not found!" << endl;
+}
+
+void returnBook() {
+    string ISBN;
+    cout << "Enter the book ISBN: ";
+    cin.ignore();
+    getline(cin, ISBN);
+
+    for (auto &transaction : transactions) {
+        if (transaction.ISBN == ISBN && !transaction.returned) {
+            transaction.returned = true;
+
+            for (auto &book : books) {
+                if (book.ISBN == ISBN) {
+                    book.isAvailable = true;
+                    book.dueDate = 0;
+                    cout << "Book returned successfully!" << endl;
+
+                    time_t now = time(0);
+                    double fine = calculateFine(transaction.dueDate, now);
+                    if (fine > 0) {
+                        cout << "This book is overdue. The fine is: $" << fixed << setprecision(2) << fine << endl;
+                    }
+                    return;
+                }
+            }
+        }
+    }
+    cout << "Transaction not found or book already returned!" << endl;
+}
+
+void calculateFine() {
+    string ISBN;
+    cout << "Enter the book ISBN: ";
+    cin.ignore();
+    getline(cin, ISBN);
+
+    for (const auto &transaction : transactions) {
+        if (transaction.ISBN == ISBN && !transaction.returned) {
+            time_t now = time(0);
+            double fine = calculateFine(transaction.dueDate, now);
+            if (fine > 0) {
+                cout << "This book is overdue. The fine is: $" << fixed << setprecision(2) << fine << endl;
+            } else {
+                cout << "No fine. The book is not overdue." << endl;
+            }
+            return;
+        }
+    }
+    cout << "Transaction not found or book already returned!" << endl;
+}
+
+void displayBooks() {
+    if (books.empty()) {
+        cout << "No books in the database." << endl;
+        return;
+    }
+    for (const auto &book : books) {
+        cout << "Title: " << book.title << ", Author: " << book.author << ", ISBN: " << book.ISBN 
+             << ", Availability: " << (book.isAvailable ? "Available" : "Checked out") << endl;
+    }
+}
+
+void addBorrower() {
+    Borrower newBorrower;
+    cout << "Enter the borrower's name: ";
+    cin.ignore();
+    getline(cin, newBorrower.name);
+    cout << "Enter the borrower's ID: ";
+    getline(cin, newBorrower.ID);
+    borrowers.push_back(newBorrower);
+    cout << "Borrower added!" << endl;
+}
+
+void displayBorrowers() {
+    if (borrowers.empty()) {
+        cout << "No borrowers in the database." << endl;
+        return;
+    }
+    for (const auto &borrower : borrowers) {
+        cout << "Name: " << borrower.name << ", ID: " << borrower.ID << endl;
+    }
+}
+
+time_t getDueDate(time_t checkoutDate, int days) {
+    return checkoutDate + days * 24 * 60 * 60;
+}
+
+double calculateFine(time_t dueDate, time_t returnDate, double finePerDay) {
+    double fine = 0.0;
+    if (returnDate > dueDate) {
+        int overdueDays = (returnDate - dueDate) / (24 * 60 * 60);
+        fine = overdueDays * finePerDay;
+    }
+    return fine;
+}
